@@ -34,7 +34,7 @@ export class mailService {
         });
       }
     } catch (error) {
-      console.error("Erreur lors de l'envoi des e-mails :", error);
+      console.error("Erreur lors de l'envoi des emails :", error);
       throw error;
     }
   }
