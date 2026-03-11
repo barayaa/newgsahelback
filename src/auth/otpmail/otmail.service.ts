@@ -12,7 +12,7 @@ export class OtmailService {
       secure: false,
       auth: {
         user: 'wahab.baraya@gmail.com',
-        pass: 'xsmtpsib-55c663483ba92bc0b2d75d326f773053ed5708e21fd026aa16bdc5e4342e0350-UJElvdRZdJxhrvv0',
+        pass: 'xsmtpsib-55c663483ba92bc0b2d75d326f773053ed5708e21fd026aa16bdc5e4342e0350-LX8GBCy2ubI80rnV',
       },
       tls: {
         rejectUnauthorized: false,
