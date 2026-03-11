@@ -7,11 +7,11 @@ export class OtmailService {
 
   constructor() {
     this.transporter = nodemailer.createTransport({
-      host: 'mail.aslogisticniger.com',
-      port: 587,
-      secure: false,
+      host: 'web48.lws-hosting.com',
+      port: 465,
+      secure: true,
       auth: {
-        user: '_mainaccount@aslogisticniger.com',
+        user: 'cp1306224p39@web48.lws-hosting.com',
         pass: 'Localhost@@4500',
       },
       tls: {
@@ -23,7 +23,7 @@ export class OtmailService {
   async sendEmail(emailData: { to: string; subject: string; html?: string }) {
     try {
       const info = await this.transporter.sendMail({
-        from: '"Grenier du sahel Service" <_mainaccount@aslogisticniger.com>',
+        from: '"Grenier du sahel Service" <cp1306224p39@web48.lws-hosting.com>',
         to: emailData.to,
         subject: emailData.subject,
         html: emailData.html,
