@@ -8,8 +8,8 @@ export class OtmailService {
   constructor() {
     this.transporter = nodemailer.createTransport({
       host: 'mail.aslogisticniger.com',
-      port: 465,
-      secure: true,
+      port: 587,
+      secure: false,
       auth: {
         user: '_mainaccount@aslogisticniger.com',
         pass: 'Localhost@@4500',
