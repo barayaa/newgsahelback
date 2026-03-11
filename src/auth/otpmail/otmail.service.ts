@@ -23,7 +23,7 @@ export class OtmailService {
   async sendEmail(emailData: { to: string; subject: string; html?: string }) {
     try {
       const info = await this.transporter.sendMail({
-        from: '"Grenier du sahel Service" <cp1306224p39@web48.lws-hosting.com>',
+        from: '"Grenier du sahel Service" <_mainaccount@aslogisticniger.com>',
         to: emailData.to,
         subject: emailData.subject,
         html: emailData.html,
