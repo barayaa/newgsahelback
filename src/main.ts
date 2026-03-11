@@ -8,7 +8,7 @@ async function bootstrap() {
   app.setGlobalPrefix('gds/api');
 
   app.enableCors({
-    origin: '*',
+    origin: ['https://illimi.ai', 'http://localhost:4200'],
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     allowedHeaders: 'Content-Type, Authorization',
     credentials: true,
