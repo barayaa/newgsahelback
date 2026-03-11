@@ -11,8 +11,8 @@ export class OtmailService {
       port: 587,
       secure: false,
       auth: {
-        user: process.env.BREVO_USER,
-        pass: process.env.BREVO_PASS,
+        user: 'wahab.baraya@gmail.com',
+        pass: 'xsmtpsib-55c663483ba92bc0b2d75d326f773053ed5708e21fd026aa16bdc5e4342e0350-UJElvdRZdJxhrvv0',
       },
       tls: {
         rejectUnauthorized: false,
