@@ -64,24 +64,24 @@ export class AuthService {
 
   async signUp(signUpDto: SignupDto) {
     try {
-      const verificationCode = this.generateVerificationCode();
-      await this.sendVerificationCode(signUpDto.email, verificationCode);
+      // const verificationCode = this.generateVerificationCode();
+      // await this.sendVerificationCode(signUpDto.email, verificationCode);
 
-      const expiresAt = new Date(Date.now() + 3 * 60 * 1000);
+      // const expiresAt = new Date(Date.now() + 3 * 60 * 1000);
 
-      this.verificationCodes[signUpDto.email] = {
-        code: verificationCode,
-        expiresAt,
-      };
+      // this.verificationCodes[signUpDto.email] = {
+      //   code: verificationCode,
+      //   expiresAt,
+      // };
 
-      return { message: 'Code de vérification envoyé à votre adresse e-mail' };
+      // return { message: 'Code de vérification envoyé à votre adresse e-mail' };
 
-      // const user = this.userRepository.create(signUpDto);
-      // user.password = await this.hasshingService.hash(user.password);
-      // await this.userRepository.save(user);
-      // const { password, ...userWithoutPassword } = user;
+      const user = this.userRepository.create(signUpDto);
+      user.password = await this.hasshingService.hash(user.password);
+      await this.userRepository.save(user);
+      const { password, ...userWithoutPassword } = user;
 
-      // return userWithoutPassword;
+      return userWithoutPassword;
     } catch (err) {
       const pgUniqueViolationErrorCode = '23505';
       if (err.code === pgUniqueViolationErrorCode) {
