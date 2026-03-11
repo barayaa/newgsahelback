@@ -15,7 +15,6 @@ import { LocaliteModule } from './DECOUPAGE ADMINISTRATIF/localite/localite.modu
 import { CommuneModule } from './DECOUPAGE ADMINISTRATIF/commune/commune.module';
 import { DepartementModule } from './DECOUPAGE ADMINISTRATIF/departement/departement.module';
 import { RegionModule } from './DECOUPAGE ADMINISTRATIF/region/region.module';
-import { join } from 'path';
 import { CategoriesModule } from './MARKET PLACE/categories/categories.module';
 import { MailModule } from './MAIL&NOTIF/mail.module';
 import { PannierModule } from './MARKET PLACE/pannier/pannier.module';
@@ -25,7 +24,7 @@ import { UniteModule } from './MARKET PLACE/unite/unite.module';
 @Module({
   imports: [
     ConfigModule.forRoot({
-      // isGlobal: true,
+      isGlobal: true,
     }),
     TypeOrmModule.forRoot({
       type: 'postgres',
@@ -34,9 +33,7 @@ import { UniteModule } from './MARKET PLACE/unite/unite.module';
       username: process.env.DB_USER,
       password: process.env.DB_PASSWORD,
       database: process.env.DB_DATABASE,
-      ssl: {
-        rejectUnauthorized: false,
-      },
+      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
       autoLoadEntities: true,
       synchronize: true,
     }),

@@ -7,12 +7,12 @@ export class mailService {
 
   constructor() {
     this.transporter = nodemailer.createTransport({
-      host: 'mail.aslogisticniger.com',
-      port: 465,
+      host: process.env.MAIL_HOST,
+      port: parseInt(process.env.MAIL_PORT ?? '465', 10),
       secure: true,
       auth: {
-        user: '_mainaccount@aslogisticniger.com',
-        pass: 'Localhost@@4500',
+        user: process.env.MAIL_USER,
+        pass: process.env.MAIL_PASS,
       },
       tls: {
         rejectUnauthorized: false,
