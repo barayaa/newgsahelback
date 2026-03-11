@@ -7,12 +7,12 @@ export class OtmailService {
 
   constructor() {
     this.transporter = nodemailer.createTransport({
-      host: 'web48.lws-hosting.com',
-      port: 465,
-      secure: true,
+      host: 'smtp-relay.brevo.com',
+      port: 587,
+      secure: false,
       auth: {
-        user: 'cp1306224p39@web48.lws-hosting.com',
-        pass: 'Localhost@@4500',
+        user: process.env.BREVO_USER,
+        pass: process.env.BREVO_PASS,
       },
       tls: {
         rejectUnauthorized: false,
