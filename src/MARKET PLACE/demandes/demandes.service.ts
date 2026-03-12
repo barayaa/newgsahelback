@@ -10,9 +10,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DeepPartial, Repository } from 'typeorm';
 import { Produit } from '../produits/entities/produit.entity';
 import { User } from 'src/PROFILE&USER/user/entities/user.entity';
-import { ConfigService } from '@nestjs/config';
 import { Role } from 'src/PROFILE&USER/user/enums/role.enum';
-import { mailService } from '../../MAIL&NOTIF/mail.service';
 
 @Injectable()
 export class DemandesService {
@@ -23,8 +21,6 @@ export class DemandesService {
     private produitRepository: Repository<Produit>,
     @InjectRepository(User)
     private userRepository: Repository<User>,
-
-    private mailService: mailService,
   ) {}
 
   async create(createDemandeDto: CreateDemandeDto): Promise<Demande> {
@@ -53,13 +49,6 @@ export class DemandesService {
       throw new BadRequestException('Vendeur non trouvé');
     }
 
-    // Vérifier que les emails existent
-    if (!acheteur.email || !vendeur.email) {
-      throw new BadRequestException(
-        "Email de l'acheteur ou du vendeur manquant",
-      );
-    }
-
     // Créer la demande
     const demande = this.demandeRepository.create({
       quantite: createDemandeDto.quantite,
@@ -69,63 +58,6 @@ export class DemandesService {
       produit,
       acheteur,
     } as DeepPartial<Demande>);
-
-    // Préparer les données email avec les objets récupérés
-    const emailData = [
-      {
-        to: [acheteur.email],
-        subject: `Confirmation de la création de votre demande`,
-        text: `Bonjour ${acheteur.nom} ${acheteur.prenom},`,
-        html: `
-          <div style="font-family: Arial, sans-serif; color: #333; line-height: 1.6; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
-            <h1 style="color: green; font-size: 24px; text-align: center; margin-bottom: 20px;">'GRENIER DU SAHEL'</h1>
-            <p style="font-size: 16px; margin: 0 0 20px;">
-              Cher <strong>${acheteur.nom} ${acheteur.prenom}</strong>,
-            </p>
-            <p style="font-size: 16px; margin: 0 0 20px;">
-              Votre demande pour le produit : ${produit.nom} a bien été créée.
-            </p>
-            <p style="font-size: 16px; margin: 0 0 20px;">
-              Merci d'utiliser notre service !
-            </p>
-            <div style="text-align: center; font-size: 14px; color: #777; border-top: 1px solid #ddd; padding-top: 10px; margin-top: 20px;">
-              <p>© 2025 GRENIER DU SAHEL NIGER. Tous droits réservés.</p>
-              <p><a href="https://grenierdusahel.com/" style="color: green; text-decoration: none;">Visitez notre site web</a></p>
-            </div>
-          </div>
-        `,
-      },
-      {
-        to: [vendeur.email],
-        subject: `Une demande vous a été adressée`,
-        text: `Bonjour,`,
-        html: `
-          <div style="font-family: Arial, sans-serif; color: #333; line-height: 1.6; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
-            <h1 style="color: green; font-size: 24px; text-align: center; margin-bottom: 20px;">'GRENIER DU SAHEL'</h1>
-            <p style="font-size: 16px; margin: 0 0 20px;">
-              Cher <strong>${vendeur.nom} ${vendeur.prenom}</strong>,
-            </p>
-            <p style="font-size: 16px; margin: 0 0 20px;">
-              Une demande pour le produit : ${produit.nom} a été créée. Veuillez vous connecter à votre compte pour accepter ou refuser.
-            </p>
-            <p style="font-size: 16px; margin: 0 0 20px;">
-              Merci d'utiliser notre service !
-            </p>
-            <div style="text-align: center; font-size: 14px; color: #777; border-top: 1px solid #ddd; padding-top: 10px; margin-top: 20px;">
-              <p>© 2025 GRENIER DU SAHEL NIGER. Tous droits réservés.</p>
-              <p><a href="https://grenierdusahel.com/" style="color: green; text-decoration: none;">Visitez notre site web</a></p>
-            </div>
-          </div>
-        `,
-      },
-    ];
-
-    // Envoyer les emails
-    try {
-      await this.mailService.sendEmails(emailData);
-    } catch (error) {
-      throw new Error("Échec de l'envoi des emails. Demande non enregistrée.");
-    }
 
     // Sauvegarder la demande
     const savedDemande = await this.demandeRepository.save(demande);
@@ -414,13 +346,6 @@ export class DemandesService {
       throw new BadRequestException('Vendeur non trouvé');
     }
 
-    // Vérifier que les emails existent
-    if (!acheteur.email || !vendeur.email) {
-      throw new BadRequestException(
-        "Email de l'acheteur ou du vendeur manquant",
-      );
-    }
-
     // Mettre à jour les champs de la demande
     const updatedDemande = Object.assign(demande, {
       quantite: updateDemandeDto.quantite ?? demande.quantite,
@@ -436,75 +361,6 @@ export class DemandesService {
     // Sauvegarder la demande mise à jour
     const savedDemande = await this.demandeRepository.save(updatedDemande);
 
-    // Préparer les emails pour informer de la modification
-    const emailData = [
-      {
-        to: [acheteur.email],
-        subject: `Votre demande a été mise à jour`,
-        text: `Bonjour ${acheteur.nom} ${acheteur.prenom},`,
-        html: `
-          <div style="font-family: Arial, sans-serif; color: #333; line-height: 1.6; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
-            <h1 style="color: green; font-size: 24px; text-align: center; margin-bottom: 20px;">'GRENIER DU SAHEL'</h1>
-            <p style="font-size: 16px; margin: 0 0 20px;">
-              Cher <strong>${acheteur.nom} ${acheteur.prenom}</strong>,
-            </p>
-            <p style="font-size: 16px; margin: 0 0 20px;">
-              Votre demande pour le produit : ${produit.nom} a été mise à jour. Voici les nouvelles informations :
-            </p>
-            <ul>
-              <li>Quantité : ${savedDemande.quantite}</li>
-              <li>Montant total : ${savedDemande.montantTotal} FCFA</li>
-              <li>Date de livraison souhaitée : ${savedDemande.dateLivraisonSouhaitee.toISOString().split('T')[0]}</li>
-              <li>Statut : ${savedDemande.statut}</li>
-            </ul>
-            <p style="font-size: 16px; margin: 0 0 20px;">
-              Merci d'utiliser notre service !
-            </p>
-            <div style="text-align: center; font-size: 14px; color: #777; border-top: 1px solid #ddd; padding-top: 10px; margin-top: 20px;">
-              <p>© 2025 GRENIER DU SAHEL NIGER. Tous droits réservés.</p>
-              <p><a href="https://grenierdusahel.com/" style="color: green; text-decoration: none;">Visitez notre site web</a></p>
-            </div>
-          </div>
-        `,
-      },
-      {
-        to: [vendeur.email],
-        subject: `Une demande a été mise à jour`,
-        text: `Bonjour,`,
-        html: `
-          <div style="font-family: Arial, sans-serif; color: #333; line-height: 1.6; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
-            <h1 style="color: green; font-size: 24px; text-align: center; margin-bottom: 20px;">'GRENIER DU SAHEL'</h1>
-            <p style="font-size: 16px; margin: 0 0 20px;">
-              Cher <strong>${vendeur.nom} ${vendeur.prenom}</strong>,
-            </p>
-            <p style="font-size: 16px; margin: 0 0 20px;">
-              Une demande pour votre produit : ${produit.nom} a été mise à jour par ${acheteur.nom} ${acheteur.prenom}. Voici les nouvelles informations :
-            </p>
-            <ul>
-              <li>Quantité : ${savedDemande.quantite}</li>
-              <li>Montant total : ${savedDemande.montantTotal} FCFA</li>
-              <li>Date de livraison souhaitée : ${savedDemande.dateLivraisonSouhaitee.toISOString().split('T')[0]}</li>
-              <li>Statut : ${savedDemande.statut}</li>
-            </ul>
-            <p style="font-size: 16px; margin: 0 0 20px;">
-              Veuillez vous connecter à votre compte pour examiner ces modifications.
-            </p>
-            <div style="text-align: center; font-size: 14px; color: #777; border-top: 1px solid #ddd; padding-top: 10px; margin-top: 20px;">
-              <p>© 2025 GRENIER DU SAHEL NIGER. Tous droits réservés.</p>
-              <p><a href="https://grenierdusahel.com/" style="color: green; text-decoration: none;">Visitez notre site web</a></p>
-            </div>
-          </div>
-        `,
-      },
-    ];
-
-    // Envoyer les emails
-    try {
-      await this.mailService.sendEmails(emailData);
-    } catch (error) {
-      throw new Error("Échec de l'envoi des emails après la mise à jour.");
-    }
-
     return savedDemande;
   }
 
@@ -518,75 +374,7 @@ export class DemandesService {
       throw new BadRequestException('Demande non trouvée');
     }
 
-    const produit = demande.produit;
-    const acheteur = demande.acheteur;
-    const vendeur = produit.user;
-
-    // Vérifier que les emails existent
-    if (!acheteur.email || !vendeur.email) {
-      throw new BadRequestException(
-        "Email de l'acheteur ou du vendeur manquant",
-      );
-    }
-
     // Supprimer la demande
     await this.demandeRepository.remove(demande);
-
-    // Préparer les emails pour informer de la suppression
-    const emailData = [
-      {
-        to: [acheteur.email],
-        subject: `Votre demande a été supprimée`,
-        text: `Bonjour ${acheteur.nom} ${acheteur.prenom},`,
-        html: `
-          <div style="font-family: Arial, sans-serif; color: #333; line-height: 1.6; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
-            <h1 style="color: green; font-size: 24px; text-align: center; margin-bottom: 20px;">'GRENIER DU SAHEL'</h1>
-            <p style="font-size: 16px; margin: 0 0 20px;">
-              Cher <strong>${acheteur.nom} ${acheteur.prenom}</strong>,
-            </p>
-            <p style="font-size: 16px; margin: 0 0 20px;">
-              Votre demande pour le produit : ${produit.nom} a été supprimée.
-            </p>
-            <p style="font-size: 16px; margin: 0 0 20px;">
-              Si vous n'êtes pas à l'origine de cette action, veuillez nous contacter.
-            </p>
-            <div style="text-align: center; font-size: 14px; color: #777; border-top: 1px solid #ddd; padding-top: 10px; margin-top: 20px;">
-              <p>© 2025 GRENIER DU SAHEL NIGER. Tous droits réservés.</p>
-              <p><a href="https://grenierdusahel.com/" style="color: green; text-decoration: none;">Visitez notre site web</a></p>
-            </div>
-          </div>
-        `,
-      },
-      {
-        to: [vendeur.email],
-        subject: `Une demande a été supprimée`,
-        text: `Bonjour,`,
-        html: `
-          <div style="font-family: Arial, sans-serif; color: #333; line-height: 1.6; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
-            <h1 style="color: green; font-size: 24px; text-align: center; margin-bottom: 20px;">'GRENIER DU SAHEL'</h1>
-            <p style="font-size: 16px; margin: 0 0 20px;">
-              Cher <strong>${vendeur.nom} ${vendeur.prenom}</strong>,
-            </p>
-            <p style="font-size: 16px; margin: 0 0 20px;">
-              Une demande pour votre produit : ${produit.nom} a été supprimée par ${acheteur.nom} ${acheteur.prenom}.
-            </p>
-            <p style="font-size: 16px; margin: 0 0 20px;">
-              Vous n'avez plus besoin de traiter cette demande.
-            </p>
-            <div style="text-align: center; font-size: 14px; color: #777; border-top: 1px solid #ddd; padding-top: 10px; margin-top: 20px;">
-              <p>© 2025 GRENIER DU SAHEL NIGER. Tous droits réservés.</p>
-              <p><a href="https://grenierdusahel.com/" style="color: green; text-decoration: none;">Visitez notre site web</a></p>
-            </div>
-          </div>
-        `,
-      },
-    ];
-
-    // Envoyer les emails
-    try {
-      await this.mailService.sendEmails(emailData);
-    } catch (error) {
-      throw new Error("Échec de l'envoi des emails après la suppression.");
-    }
   }
 }
