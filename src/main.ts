@@ -8,7 +8,12 @@ async function bootstrap() {
   app.setGlobalPrefix('gds/api');
 
   app.enableCors({
-    origin: ['https://illimi.ai', 'http://localhost:4200'],
+    origin: [
+      'https://illimi.ai',
+      'http://localhost:4200',
+      'http://grenier-sahel.org',
+      'https://grenier-sahel.org',
+    ],
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     allowedHeaders: 'Content-Type, Authorization',
     credentials: true,
