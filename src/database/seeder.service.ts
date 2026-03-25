@@ -19,6 +19,7 @@ export class SeederService implements OnApplicationBootstrap {
       password: 'grenierSahel@2028',
       nom: 'Baraya',
       prenom: 'Wahab',
+      telephone: '+22700000001',
       role: Role.SUPERADMIN,
     });
     await this.seedUser({
@@ -26,11 +27,12 @@ export class SeederService implements OnApplicationBootstrap {
       password: '1234567',
       nom: 'Djibril',
       prenom: 'SAD',
+      telephone: '+22700000002',
       role: Role.ADMIN,
     });
   }
 
-  private async seedUser(data: { email: string; password: string; nom: string; prenom: string; role: Role }) {
+  private async seedUser(data: { email: string; password: string; nom: string; prenom: string; telephone: string; role: Role }) {
     const exists = await this.userRepo.findOne({ where: { email: data.email } });
     if (exists) {
       this.logger.log(`User ${data.email} already exists — skipping seed`);
@@ -43,6 +45,7 @@ export class SeederService implements OnApplicationBootstrap {
       password: hashedPassword,
       nom: data.nom,
       prenom: data.prenom,
+      telephone: data.telephone,
       role: data.role,
       isActive: true,
     });
