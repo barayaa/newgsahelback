@@ -5,6 +5,8 @@ import { AuthModule } from './auth/auth.module';
 import { ConfigModule } from '@nestjs/config';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
 import { UserModule } from './PROFILE&USER/user/user.module';
 import { ProduitsModule } from './MARKET PLACE/produits/produits.module';
 import { DemandesModule } from './MARKET PLACE/demandes/demandes.module';
@@ -19,7 +21,15 @@ import { CategoriesModule } from './MARKET PLACE/categories/categories.module';
 import { MailModule } from './MAIL&NOTIF/mail.module';
 import { PannierModule } from './MARKET PLACE/pannier/pannier.module';
 import { UniteModule } from './MARKET PLACE/unite/unite.module';
-// import { NotificationsModule } from './MAIL&NOTIF/notification.module';
+import { StatsModule } from './stats/stats.module';
+import { ReviewsModule } from './reviews/reviews.module';
+import { FavoritesModule } from './favorites/favorites.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { PriceHistoryModule } from './price-history/price-history.module';
+import { HealthModule } from './health/health.module';
+import { EscrowModule } from './escrow/escrow.module';
+import { CartographieModule } from './cartographie/cartographie.module';
+import { SeederModule } from './database/seeder.module';
 
 @Module({
   imports: [
@@ -37,6 +47,7 @@ import { UniteModule } from './MARKET PLACE/unite/unite.module';
       autoLoadEntities: true,
       synchronize: true,
     }),
+    ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
 
     AuthModule,
     UserModule,
@@ -53,9 +64,23 @@ import { UniteModule } from './MARKET PLACE/unite/unite.module';
     MailModule,
     PannierModule,
     UniteModule,
-    // NotificationsModule,
+    StatsModule,
+    ReviewsModule,
+    FavoritesModule,
+    NotificationsModule,
+    PriceHistoryModule,
+    HealthModule,
+    EscrowModule,
+    CartographieModule,
+    SeederModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+  ],
 })
 export class AppModule { }

@@ -7,6 +7,7 @@ import {
   Param,
   Delete,
   Request,
+  Query,
   SetMetadata,
   UseInterceptors,
   UploadedFile,
@@ -76,8 +77,14 @@ export class ProduitsController {
 
   @Auth(AuthType.None)
   @Get()
-  findAll() {
-    return this.produitsService.findAll();
+  findAll(
+    @Query('search') search?: string,
+    @Query('category') category?: number,
+    @Query('localite') localite?: number,
+    @Query('page') page?: number,
+    @Query('limit') limit?: number,
+  ) {
+    return this.produitsService.findAll({ search, category, localite, page, limit });
   }
 
   @Auth(AuthType.None)

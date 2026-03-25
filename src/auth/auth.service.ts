@@ -60,6 +60,7 @@ export class AuthService {
   async signIn(signInDto: SignInDto) {
     const user = await this.userRepository.findOne({
       where: { email: signInDto.email },
+      select: ['id', 'email', 'nom', 'prenom', 'role', 'password'],
     });
 
     if (!user) {
@@ -96,9 +97,8 @@ export class AuthService {
 
   async changePassword(changePasswordDto: ChangePasswordDto) {
     const user = await this.userRepository.findOne({
-      where: {
-        id: changePasswordDto.userId,
-      },
+      where: { id: changePasswordDto.userId },
+      select: ['id', 'email', 'password'],
     });
 
     if (!user) {

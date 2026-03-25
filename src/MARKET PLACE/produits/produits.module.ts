@@ -10,6 +10,7 @@ import { MagasinProduit } from 'src/DECOUPAGE ADMINISTRATIF/magasin/entities/mag
 import { MailModule } from 'src/MAIL&NOTIF/mail.module';
 import { Pannier } from '../pannier/entities/pannier.entity';
 import { Unites } from '../unite/entities/unite.entity';
+import { PriceHistoryModule } from 'src/price-history/price-history.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { Unites } from '../unite/entities/unite.entity';
       Unites,
     ]),
     MailModule,
+    PriceHistoryModule,
   ],
   controllers: [ProduitsController],
   providers: [ProduitsService],

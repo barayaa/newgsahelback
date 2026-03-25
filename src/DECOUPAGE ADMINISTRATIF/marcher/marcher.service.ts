@@ -54,7 +54,16 @@ export class MarcherService {
 
   findOne(id: number) {
     return this.marcherRepository.findOne({
-      where: { id: id },
+      where: { id },
+      relations: {
+        localite: {
+          commune: {
+            departement: {
+              region: true,
+            },
+          },
+        },
+      },
     });
   }
 

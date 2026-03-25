@@ -8,7 +8,7 @@ import { CreateProduitDto } from './dto/create-produit.dto';
 import { UpdateProduitDto } from './dto/update-produit.dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Produit } from './entities/produit.entity';
-import { Repository } from 'typeorm';
+import { ILike, Repository } from 'typeorm';
 import { Role } from 'src/PROFILE&USER/user/enums/role.enum';
 import { User } from 'src/PROFILE&USER/user/entities/user.entity';
 import { Localite } from 'src/DECOUPAGE ADMINISTRATIF/localite/entities/localite.entity';
@@ -17,6 +17,7 @@ import { join } from 'path';
 import * as fs from 'fs';
 import { MagasinProduit } from 'src/DECOUPAGE ADMINISTRATIF/magasin/entities/magasin_produit.entity';
 import { Unites } from '../unite/entities/unite.entity';
+import { PriceHistoryService } from 'src/price-history/price-history.service';
 
 @Injectable()
 export class ProduitsService {
@@ -32,6 +33,7 @@ export class ProduitsService {
     @InjectRepository(MagasinProduit)
     private magasinProduitRepository: Repository<MagasinProduit>,
     @InjectRepository(Unites) private uniteRepository: Repository<Unites>, // Ajout du repository Unite
+    private priceHistoryService: PriceHistoryService,
   ) {}
 
   // async create(
@@ -177,12 +179,36 @@ export class ProduitsService {
 
     const savedProduit = await this.produitRepository.save(produit);
 
+    // Record price history
+    await this.priceHistoryService.record(savedProduit.id, savedProduit.prix);
+
     return savedProduit;
   }
-  async findAll(): Promise<Produit[]> {
-    return this.produitRepository.find({
-      relations: ['user', 'category', 'localite'],
+  async findAll(filters?: {
+    search?: string;
+    category?: number;
+    localite?: number;
+    page?: number;
+    limit?: number;
+  }): Promise<any> {
+    const page = filters?.page || 1;
+    const limit = filters?.limit || 20;
+    const skip = (page - 1) * limit;
+
+    const where: any = {};
+    if (filters?.search) where.nom = ILike(`%${filters.search}%`);
+    if (filters?.category) where.category = { id: Number(filters.category) };
+    if (filters?.localite) where.localite = { id: Number(filters.localite) };
+
+    const [data, total] = await this.produitRepository.findAndCount({
+      where,
+      relations: ['user', 'category', 'localite', 'unite'],
+      order: { createdAt: 'DESC' },
+      skip,
+      take: limit,
     });
+
+    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async findOne(id: number): Promise<Produit> {
@@ -293,7 +319,14 @@ export class ProduitsService {
       produit.image = `/uploads/${file.filename}`;
     }
 
-    return this.produitRepository.save(produit);
+    const updatedProduit = await this.produitRepository.save(produit);
+
+    // Record price history if price changed
+    if (updateProduitDto.prix) {
+      await this.priceHistoryService.record(updatedProduit.id, updatedProduit.prix);
+    }
+
+    return updatedProduit;
   }
   async remove(id: number): Promise<void> {
     // const produit = await this.findOne(id);

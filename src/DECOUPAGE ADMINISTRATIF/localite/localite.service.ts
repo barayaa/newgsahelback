@@ -35,14 +35,27 @@ export class LocaliteService {
 
   async findAll(): Promise<Localite[]> {
     return this.localitesRepository.find({
-      relations: ['commune', 'produits'],
+      relations: {
+        commune: {
+          departement: {
+            region: true,
+          },
+        },
+      },
     });
   }
 
   async findOne(id: number): Promise<Localite> {
     const localite = await this.localitesRepository.findOne({
       where: { id },
-      relations: ['commune', 'produits'],
+      relations: {
+        commune: {
+          departement: {
+            region: true,
+          },
+        },
+        produits: true,
+      },
     });
     if (!localite) {
       throw new NotFoundException(`Localité avec l'ID ${id} non trouvée`);

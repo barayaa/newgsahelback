@@ -1,7 +1,7 @@
 import {
   BadRequestException,
   ForbiddenException,
-  Injectable,
+  Injectable, forwardRef, Inject,
 } from '@nestjs/common';
 import { CreateDemandeDto } from './dto/create-demande.dto';
 import { UpdateDemandeDto } from './dto/update-demande.dto';
@@ -10,7 +10,10 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DeepPartial, Repository } from 'typeorm';
 import { Produit } from '../produits/entities/produit.entity';
 import { User } from 'src/PROFILE&USER/user/entities/user.entity';
-import { Role } from 'src/PROFILE&USER/user/enums/role.enum';
+import { NotificationsService } from 'src/notifications/notifications.service';
+import { NotificationsGateway } from 'src/notifications/notifications.gateway';
+import { NotificationType } from 'src/notifications/entities/notification.entity';
+import { EscrowService } from 'src/escrow/escrow.service';
 
 @Injectable()
 export class DemandesService {
@@ -21,360 +24,276 @@ export class DemandesService {
     private produitRepository: Repository<Produit>,
     @InjectRepository(User)
     private userRepository: Repository<User>,
+    private notificationsService: NotificationsService,
+    private notificationsGateway: NotificationsGateway,
+    @Inject(forwardRef(() => EscrowService)) private escrowService: EscrowService,
   ) {}
 
   async create(createDemandeDto: CreateDemandeDto): Promise<Demande> {
-    console.log('DTO reçu:', createDemandeDto);
-
-    // Récupérer le produit avec la relation 'user'
     const produit = await this.produitRepository.findOne({
       where: { id: createDemandeDto.produit },
-      relations: ['user'], // Inclure l'utilisateur (vendeur)
+      relations: ['user'],
     });
-    if (!produit) {
-      throw new BadRequestException('Produit non trouvé');
-    }
+    if (!produit) throw new BadRequestException('Produit non trouvé');
 
-    // Récupérer l'acheteur
     const acheteur = await this.userRepository.findOne({
       where: { id: createDemandeDto.acheteur },
     });
-    if (!acheteur) {
-      throw new BadRequestException('Acheteur non trouvé');
-    }
+    if (!acheteur) throw new BadRequestException('Acheteur non trouvé');
 
-    // Le vendeur est l'utilisateur associé au produit
     const vendeur = produit.user;
-    if (!vendeur) {
-      throw new BadRequestException('Vendeur non trouvé');
-    }
+    if (!vendeur) throw new BadRequestException('Vendeur non trouvé');
 
-    // Créer la demande
     const demande = this.demandeRepository.create({
       quantite: createDemandeDto.quantite,
       montantTotal: createDemandeDto.montantTotal,
-      dateLivraisonSouhaitee: new Date(createDemandeDto.dateLivraisonSouhaitee),
-      statut: StatutDemande.EN_ATTENTE,
+      dateLivraisonSouhaitee: createDemandeDto.dateLivraisonSouhaitee
+        ? new Date(createDemandeDto.dateLivraisonSouhaitee)
+        : null,
+      statut: StatutDemande.TRANSMISE_VENDEUR,
       produit,
       acheteur,
     } as DeepPartial<Demande>);
 
-    // Sauvegarder la demande
     const savedDemande = await this.demandeRepository.save(demande);
+
+    // Notify seller
+    const notif = await this.notificationsService.create(
+      vendeur.id,
+      'Nouvelle demande reçue',
+      `${acheteur.prenom} ${acheteur.nom} a commandé ${createDemandeDto.quantite} unité(s) de "${produit.nom}"`,
+      NotificationType.DEMANDE_RECUE,
+      savedDemande.id,
+    );
+    if (notif) this.notificationsGateway.broadcastNotification(vendeur.id, notif);
 
     return savedDemande;
   }
 
-  async transmettreAuVendeur(id: number, admin: User): Promise<Demande> {
-    if (admin.role !== Role.ADMIN) {
-      throw new ForbiddenException(
-        'Seul un admin peut transmettre une demande',
-      );
+  async repondreDemande(id: number, accepter: boolean, vendeurId: number): Promise<Demande> {
+    const demande = await this.demandeRepository.findOne({
+      where: { id },
+      relations: ['produit', 'produit.user', 'acheteur'],
+    });
+    if (!demande) throw new BadRequestException(`Demande #${id} non trouvée`);
+
+    if (demande.produit.user.id !== vendeurId) {
+      throw new ForbiddenException('Vous n\'êtes pas autorisé à répondre à cette demande');
     }
 
+    const allowedStatuts = [StatutDemande.TRANSMISE_VENDEUR, StatutDemande.EN_ATTENTE];
+    if (!allowedStatuts.includes(demande.statut)) {
+      throw new BadRequestException('Cette demande ne peut plus être modifiée');
+    }
+
+    demande.statut = accepter ? StatutDemande.ACCEPTER : StatutDemande.REFUSER;
+    const updated = await this.demandeRepository.save(demande);
+
+    // Notify buyer
+    const type = accepter ? NotificationType.DEMANDE_VALIDEE : NotificationType.DEMANDE_REJETEE;
+    const titre = accepter ? 'Demande acceptée ✓' : 'Demande refusée';
+    const message = accepter
+      ? `Votre demande pour "${demande.produit.nom}" a été acceptée par le vendeur.`
+      : `Votre demande pour "${demande.produit.nom}" a été refusée par le vendeur.`;
+
+    const notif = await this.notificationsService.create(
+      demande.acheteur.id, titre, message, type, demande.id,
+    );
+    if (notif) this.notificationsGateway.broadcastNotification(demande.acheteur.id, notif);
+
+    return updated;
+  }
+
+  async marquerEnLivraison(id: number, vendeurId: number): Promise<Demande> {
+    const demande = await this.demandeRepository.findOne({
+      where: { id },
+      relations: ['produit', 'produit.user', 'acheteur'],
+    });
+    if (!demande) throw new BadRequestException(`Demande #${id} non trouvée`);
+
+    if (demande.produit.user.id !== vendeurId) {
+      throw new ForbiddenException('Action non autorisée');
+    }
+    if (demande.statut !== StatutDemande.ACCEPTER) {
+      throw new BadRequestException('La demande doit être acceptée avant la livraison');
+    }
+
+    // Update stock
+    const produit = await this.produitRepository.findOne({ where: { id: demande.produit.id } });
+    if (produit.quantite < demande.quantite) throw new BadRequestException('Stock insuffisant');
+    produit.quantite -= demande.quantite;
+    await this.produitRepository.save(produit);
+
+    demande.statut = StatutDemande.EN_LIVRAISON;
+    const updated = await this.demandeRepository.save(demande);
+
+    // Notify buyer
+    const notif = await this.notificationsService.create(
+      demande.acheteur.id,
+      'Commande en cours de livraison 🚚',
+      `Votre commande de "${demande.produit.nom}" est en cours de livraison.`,
+      NotificationType.SYSTEME,
+      demande.id,
+    );
+    if (notif) this.notificationsGateway.broadcastNotification(demande.acheteur.id, notif);
+
+    return updated;
+  }
+
+  async confirmerLivraison(id: number, acheteurId: number): Promise<Demande> {
+    const demande = await this.demandeRepository.findOne({
+      where: { id },
+      relations: ['produit', 'produit.user', 'acheteur'],
+    });
+    if (!demande) throw new BadRequestException(`Demande #${id} non trouvée`);
+
+    if (demande.acheteur.id !== acheteurId) {
+      throw new ForbiddenException('Action non autorisée');
+    }
+    if (demande.statut !== StatutDemande.EN_LIVRAISON) {
+      throw new BadRequestException('La commande n\'est pas encore en livraison');
+    }
+
+    demande.statut = StatutDemande.LIVRER;
+    const updated = await this.demandeRepository.save(demande);
+
+    // Libérer les fonds en escrow vers le vendeur
+    await this.escrowService.libererFonds(demande.id);
+
+    // Notify seller
+    const notif = await this.notificationsService.create(
+      demande.produit.user.id,
+      'Livraison confirmée — Fonds libérés 💰',
+      `L'acheteur a confirmé la réception de "${demande.produit.nom}". Vos fonds sont en cours de virement.`,
+      NotificationType.SYSTEME,
+      demande.id,
+    );
+    if (notif) this.notificationsGateway.broadcastNotification(demande.produit.user.id, notif);
+
+    return updated;
+  }
+
+  async transmettreAuVendeur(id: number): Promise<Demande> {
     const demande = await this.findOne(id);
     if (demande.statut !== StatutDemande.EN_ATTENTE) {
       throw new BadRequestException('Demande non en attente');
     }
-
     demande.statut = StatutDemande.TRANSMISE_VENDEUR;
-    const updatedDemande = await this.demandeRepository.save(demande);
-
-    return updatedDemande;
+    return this.demandeRepository.save(demande);
   }
 
-  async repondreDemande(
-    id: number,
-    accepter: boolean,
-    vendeurId: number,
-  ): Promise<Demande> {
-    const demande = await this.findOne(id);
-    if (demande.produit.user.id !== vendeurId) {
-      throw new ForbiddenException(
-        'Vous n’êtes pas autorisé à répondre à cette demande',
-      );
-    }
-    if (demande.statut !== StatutDemande.TRANSMISE_VENDEUR) {
-      throw new BadRequestException('Demande non en attente de réponse');
-    }
-
-    demande.statut = accepter ? StatutDemande.ACCEPTER : StatutDemande.REFUSER;
-    const updatedDemande = await this.demandeRepository.save(demande);
-
-    return updatedDemande;
-  }
-
-  async confirmerPaiement(
-    id: number,
-    paiementReference: string,
-    admin: User,
-  ): Promise<Demande> {
-    if (admin.role !== Role.ADMIN) {
-      throw new ForbiddenException('Seul un admin peut confirmer un paiement');
-    }
-
+  async confirmerPaiement(id: number, paiementReference: string, admin: User): Promise<Demande> {
     const demande = await this.findOne(id);
     if (demande.statut !== StatutDemande.ACCEPTER) {
       throw new BadRequestException('Demande non acceptée');
     }
 
     demande.statut = StatutDemande.PAYER;
-    // demande.paiementReference = paiementReference;
-    const updatedDemande = await this.demandeRepository.save(demande);
+    const updated = await this.demandeRepository.save(demande);
 
-    const produit = await this.produitRepository.findOne({
-      where: { id: demande.produit.id },
-    });
+    const produit = await this.produitRepository.findOne({ where: { id: demande.produit.id } });
     produit.quantite -= demande.quantite;
-    if (produit.quantite < 0) {
-      throw new BadRequestException('Stock insuffisant');
-    }
+    if (produit.quantite < 0) throw new BadRequestException('Stock insuffisant');
     await this.produitRepository.save(produit);
 
-    updatedDemande.statut = StatutDemande.EN_LIVRAISON;
-    await this.demandeRepository.save(updatedDemande);
+    updated.statut = StatutDemande.EN_LIVRAISON;
+    await this.demandeRepository.save(updated);
 
-    return updatedDemande;
+    return updated;
   }
 
-  // async confirmerLivraison(id: number, acheteurId: number): Promise<Demande> {
-  //   const demande = await this.findOne(id);
-  //   if (demande.acheteur.id !== acheteurId) {
-  //     throw new ForbiddenException(
-  //       'Vous n’êtes pas autorisé à confirmer cette livraison',
-  //     );
-  //   }
-  //   if (demande.statut !== StatutDemande.EN_LIVRAISON) {
-  //     throw new BadRequestException('Demande non en cours de livraison');
-  //   }
-
-  //   demande.statut = StatutDemande.LIVREE;
-  //   demande.livraisonConfirmeeParAcheteur = true;
-  //   const updatedDemande = await this.demandeRepository.save(demande);
-
-  //   await this.mailerService.sendMail({
-  //     to: this.configService.get('ADMIN_EMAIL'),
-  //     subject: `Livraison confirmée pour la demande #${demande.id}`,
-  //     template: './livraison-confirmee',
-  //     context: {
-  //       demandeId: demande.id,
-  //       produit: demande.produit.nom,
-  //       acheteur: demande.acheteur.email,
-  //     },
-  //   });
-
-  //   await this.mailerService.sendMail({
-  //     to: demande.produit.user.email,
-  //     subject: `Livraison confirmée pour la demande #${demande.id}`,
-  //     template: './livraison-vendeur',
-  //     context: {
-  //       demandeId: demande.id,
-  //       produit: demande.produit.nom,
-  //     },
-  //   });
-
-  //   return updatedDemande;
-  // }
-
-  // async finaliserTransaction(id: number, admin: User): Promise<Demande> {
-  //   if (admin.role !== Role.ADMIN) {
-  //     throw new ForbiddenException(
-  //       'Seul un admin peut finaliser une transaction',
-  //     );
-  //   }
-
-  //   const demande = await this.findOne(id);
-  //   if (
-  //     demande.statut !== StatutDemande.LIVREE ||
-  //     !demande.livraisonConfirmeeParAcheteur
-  //   ) {
-  //     throw new BadRequestException('Livraison non confirmée');
-  //   }
-
-  //   demande.statut = StatutDemande.COMPLETEE;
-  //   const updatedDemande = await this.demandeRepository.save(demande);
-
-  //   await this.mailerService.sendMail({
-  //     to: demande.vendeur.email,
-  //     subject: `Paiement transféré pour la demande #${demande.id}`,
-  //     template: './paiement-transfere',
-  //     context: {
-  //       demandeId: demande.id,
-  //       produit: demande.produit.nom,
-  //       montant: demande.montantTotal,
-  //     },
-  //   });
-
-  //   await this.mailerService.sendMail({
-  //     to: demande.acheteur.email,
-  //     subject: `Transaction #${demande.id} finalisée`,
-  //     template: './transaction-finalisee',
-  //     context: {
-  //       demandeId: demande.id,
-  //       produit: demande.produit.nom,
-  //     },
-  //   });
-
-  //   return updatedDemande;
-  // }
-
   async findAll(): Promise<Demande[]> {
-    const demandes = await this.demandeRepository.find({
-      relations: {
-        produit: true,
-        acheteur: true,
-      },
+    return this.demandeRepository.find({
+      relations: { produit: true, acheteur: true },
     });
-    return demandes;
   }
 
   async findOne(id: number): Promise<Demande> {
-    console.log(`Récupération de la demande #${id}`);
     const demande = await this.demandeRepository.findOne({
       where: { id },
-      relations: ['produit'],
+      relations: ['produit', 'produit.user', 'acheteur'],
     });
-    if (!demande) {
-      throw new BadRequestException(`Demande #${id} non trouvée`);
-    }
+    if (!demande) throw new BadRequestException(`Demande #${id} non trouvée`);
     return demande;
   }
-  async findDemandsBySeller(sellerId: number): Promise<Demande[]> {
-    // Vérifier si l'utilisateur existe
-    const user = await this.userRepository.findOne({ where: { id: sellerId } });
-    if (!user) {
-      throw new BadRequestException('Utilisateur non trouvé');
-    }
 
-    // Récupérer les demandes où l'utilisateur est vendeur (via produit.userId)
-    const demands = await this.demandeRepository
+  async findDemandsBySeller(sellerId: number): Promise<Demande[]> {
+    const user = await this.userRepository.findOne({ where: { id: sellerId } });
+    if (!user) throw new BadRequestException('Utilisateur non trouvé');
+
+    return this.demandeRepository
       .createQueryBuilder('demande')
       .leftJoinAndSelect('demande.produit', 'produit')
       .leftJoinAndSelect('produit.user', 'vendeur')
       .leftJoinAndSelect('demande.acheteur', 'acheteur')
       .where('produit.userId = :sellerId', { sellerId })
+      .orderBy('demande.createdAt', 'DESC')
       .getMany();
-
-    return demands;
   }
 
   async findDemandsByBuyer(buyerId: number): Promise<Demande[]> {
-    // Vérifier si l'utilisateur existe
     const user = await this.userRepository.findOne({ where: { id: buyerId } });
-    if (!user) {
-      throw new BadRequestException('Utilisateur non trouvé');
-    }
+    if (!user) throw new BadRequestException('Utilisateur non trouvé');
 
-    // Récupérer les demandes où l'utilisateur est acheteur
-    const demands = await this.demandeRepository
+    return this.demandeRepository
       .createQueryBuilder('demande')
       .leftJoinAndSelect('demande.produit', 'produit')
       .leftJoinAndSelect('produit.user', 'vendeur')
       .leftJoinAndSelect('demande.acheteur', 'acheteur')
       .where('demande.acheteurId = :buyerId', { buyerId })
+      .orderBy('demande.createdAt', 'DESC')
       .getMany();
-
-    return demands;
   }
 
-  // async findByAcheteur(acheteurId: number): Promise<Demande[]> {
-  //   const demandes = await this.demandeRepository.find({
-  //     where: { acheteur: { id: acheteurId } },
-  //     relations: ['produit', 'acheteur'],
-  //   });
-  //   return demandes;
-  // }
-
-  // async findByVendeur(vendeurId: number): Promise<Demande[]> {
-  //   const demandes = await this.demandeRepository.find({
-  //     where: { produit: { user: { id: vendeurId } } },
-  //     relations: ['produit', 'acheteur'],
-  //   });
-  //   return demandes;
-  // }
-
   async findByProduit(produitId: number): Promise<Demande[]> {
-    const demandes = await this.demandeRepository.find({
+    return this.demandeRepository.find({
       where: { produit: { id: produitId } },
       relations: ['produit', 'acheteur'],
     });
-    return demandes;
   }
 
-  async update(
-    id: number,
-    updateDemandeDto: UpdateDemandeDto,
-  ): Promise<Demande> {
-    // Récupérer la demande existante avec les relations
+  async update(id: number, updateDemandeDto: UpdateDemandeDto): Promise<Demande> {
     const demande = await this.demandeRepository.findOne({
       where: { id },
       relations: ['produit', 'produit.user', 'acheteur'],
     });
-    if (!demande) {
-      throw new BadRequestException('Demande non trouvée');
-    }
+    if (!demande) throw new BadRequestException('Demande non trouvée');
 
-    // Récupérer le produit si modifié
     let produit = demande.produit;
     if (updateDemandeDto.produit && updateDemandeDto.produit !== produit.id) {
       produit = await this.produitRepository.findOne({
         where: { id: updateDemandeDto.produit },
         relations: ['user'],
       });
-      if (!produit) {
-        throw new BadRequestException('Produit non trouvé');
-      }
+      if (!produit) throw new BadRequestException('Produit non trouvé');
     }
 
-    // Récupérer l'acheteur si modifié
     let acheteur = demande.acheteur;
-    if (
-      updateDemandeDto.acheteur &&
-      updateDemandeDto.acheteur !== acheteur.id
-    ) {
-      acheteur = await this.userRepository.findOne({
-        where: { id: updateDemandeDto.acheteur },
-      });
-      if (!acheteur) {
-        throw new BadRequestException('Acheteur non trouvé');
-      }
+    if (updateDemandeDto.acheteur && updateDemandeDto.acheteur !== acheteur.id) {
+      acheteur = await this.userRepository.findOne({ where: { id: updateDemandeDto.acheteur } });
+      if (!acheteur) throw new BadRequestException('Acheteur non trouvé');
     }
 
-    // Le vendeur est l'utilisateur associé au produit
-    const vendeur = produit.user;
-    if (!vendeur) {
-      throw new BadRequestException('Vendeur non trouvé');
-    }
-
-    // Mettre à jour les champs de la demande
-    const updatedDemande = Object.assign(demande, {
+    const updated = Object.assign(demande, {
       quantite: updateDemandeDto.quantite ?? demande.quantite,
       montantTotal: updateDemandeDto.montantTotal ?? demande.montantTotal,
       dateLivraisonSouhaitee: updateDemandeDto.dateLivraisonSouhaitee
         ? new Date(updateDemandeDto.dateLivraisonSouhaitee)
         : demande.dateLivraisonSouhaitee,
       statut: updateDemandeDto.statut ?? demande.statut,
-      produit: produit,
-      acheteur: acheteur,
+      produit,
+      acheteur,
     });
 
-    // Sauvegarder la demande mise à jour
-    const savedDemande = await this.demandeRepository.save(updatedDemande);
-
-    return savedDemande;
+    return this.demandeRepository.save(updated);
   }
 
   async remove(id: number): Promise<void> {
-    // Récupérer la demande avec les relations
     const demande = await this.demandeRepository.findOne({
       where: { id },
       relations: ['produit', 'produit.user', 'acheteur'],
     });
-    if (!demande) {
-      throw new BadRequestException('Demande non trouvée');
-    }
-
-    // Supprimer la demande
+    if (!demande) throw new BadRequestException('Demande non trouvée');
     await this.demandeRepository.remove(demande);
   }
 }

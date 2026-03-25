@@ -2,7 +2,13 @@ import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/commo
 import { UserService } from './user.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { Auth } from 'src/auth/decorators/auth.decorators';
+import { AuthType } from 'src/auth/enums/auth.types.enum';
+import { Roles } from 'src/auth/authorization/role.decorators';
+import { Role } from './enums/role.enum';
 
+@Auth(AuthType.Bearer)
+@Roles(Role.ADMIN, Role.SUPERADMIN)
 @Controller('user')
 export class UserController {
   constructor(private readonly userService: UserService) {}

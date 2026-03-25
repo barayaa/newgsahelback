@@ -1,9 +1,11 @@
 import {
   Column,
+  CreateDateColumn,
   Entity,
   OneToMany,
   OneToOne,
   PrimaryGeneratedColumn,
+  UpdateDateColumn,
 } from 'typeorm';
 import { Role } from '../enums/role.enum';
 import { Produit } from 'src/MARKET PLACE/produits/entities/produit.entity';
@@ -29,11 +31,26 @@ export class User {
   @Column()
   telephone: string;
 
-  @Column()
+  @Column({ select: false })
   password: string;
 
   @Column({ type: 'enum', enum: Role, default: Role.ACHETEUR })
   role: Role;
+
+  @Column({ nullable: true })
+  pays: string;
+
+  @Column({ nullable: true })
+  ville: string;
+
+  @Column({ default: true })
+  isActive: boolean;
+
+  @CreateDateColumn()
+  createdAt: Date;
+
+  @UpdateDateColumn()
+  updatedAt: Date;
 
   @OneToMany(() => Produit, (produit) => produit.user)
   produits: Produit[];
