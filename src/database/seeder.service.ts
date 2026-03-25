@@ -38,12 +38,12 @@ export class SeederService implements OnApplicationBootstrap {
 
     const exists = await this.userRepo.findOne({ where: { email: data.email } });
     if (exists) {
-      // Mettre à jour le rôle et le mot de passe si l'utilisateur existe déjà
-      await this.userRepo.update(exists.id, {
-        role: data.role,
-        password: hashedPassword,
-        isActive: true,
-      });
+      // QueryBuilder contourne les limitations de select:false sur update()
+      await this.userRepo.createQueryBuilder()
+        .update()
+        .set({ role: data.role, password: hashedPassword, isActive: true })
+        .where('id = :id', { id: exists.id })
+        .execute();
       this.logger.log(`Updated ${data.role}: ${data.email}`);
       return;
     }

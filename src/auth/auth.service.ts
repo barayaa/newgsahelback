@@ -95,6 +95,26 @@ export class AuthService {
     return { accessToken };
   }
 
+  async resetPassword(email: string, newPassword: string) {
+    const user = await this.userRepository.findOne({
+      where: { email },
+      select: ['id', 'email'],
+    });
+
+    if (!user) {
+      throw new UnauthorizedException("Aucun compte associé à cet email");
+    }
+
+    const hashed = await this.hasshingService.hash(newPassword);
+    await this.userRepository.createQueryBuilder()
+      .update()
+      .set({ password: hashed })
+      .where('id = :id', { id: user.id })
+      .execute();
+
+    return { message: 'Mot de passe réinitialisé avec succès' };
+  }
+
   async changePassword(changePasswordDto: ChangePasswordDto) {
     const user = await this.userRepository.findOne({
       where: { id: changePasswordDto.userId },
