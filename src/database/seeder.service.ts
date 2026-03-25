@@ -33,13 +33,21 @@ export class SeederService implements OnApplicationBootstrap {
   }
 
   private async seedUser(data: { email: string; password: string; nom: string; prenom: string; telephone: string; role: Role }) {
-    const exists = await this.userRepo.findOne({ where: { email: data.email } });
-    if (exists) {
-      this.logger.log(`User ${data.email} already exists — skipping seed`);
-      return;
-    }
     const salt = await genSalt();
     const hashedPassword = await hash(data.password, salt);
+
+    const exists = await this.userRepo.findOne({ where: { email: data.email } });
+    if (exists) {
+      // Mettre à jour le rôle et le mot de passe si l'utilisateur existe déjà
+      await this.userRepo.update(exists.id, {
+        role: data.role,
+        password: hashedPassword,
+        isActive: true,
+      });
+      this.logger.log(`Updated ${data.role}: ${data.email}`);
+      return;
+    }
+
     const user = this.userRepo.create({
       email: data.email,
       password: hashedPassword,
